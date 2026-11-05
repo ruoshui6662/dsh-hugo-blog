@@ -1,0 +1,92 @@
+[
+  {
+    "id": "trigger-01",
+    "input": "帮我写一篇新博客，主题是 Hugo 的 archetype 用法",
+    "expect": "trigger",
+    "note": "should_trigger：写博客/新文章意图，走 hugo_new_content 起草流程"
+  },
+  {
+    "id": "trigger-02",
+    "input": "把这篇草稿发布了",
+    "expect": "trigger",
+    "note": "should_trigger：发布意图，走 build 检查后 hugo_publish"
+  },
+  {
+    "id": "trigger-03",
+    "input": "巡检一下定时要发的文章",
+    "expect": "trigger",
+    "note": "should_trigger：巡检/定时发布意图，走 hugo_list future kind"
+  },
+  {
+    "id": "trigger-04",
+    "input": "给这篇 Hugo 文章改个标题和 publishDate",
+    "expect": "trigger",
+    "note": "should_trigger：Hugo front matter 修改意图，走 hugo_edit_frontmatter"
+  },
+  {
+    "id": "trigger-05",
+    "input": "新开一篇带配图的文章，用 page bundle 组织图片",
+    "expect": "trigger",
+    "note": "should_trigger：带图新文章，走 hugo_new_pagebundle"
+  },
+  {
+    "id": "trigger-06",
+    "input": "这周要下架的文章有哪些？",
+    "expect": "trigger",
+    "note": "should_trigger：定时下架巡检意图，走 hugo_list expired kind"
+  },
+  {
+    "id": "no-trigger-01",
+    "input": "这个 Cargo 项目怎么编译",
+    "expect": "no_trigger",
+    "note": "should_not_trigger：非 Hugo 站点，不触发"
+  },
+  {
+    "id": "no-trigger-02",
+    "input": "git status 看看",
+    "expect": "no_trigger",
+    "note": "should_not_trigger：纯 git 状态查询只用 git_status_summary，不走完整流程"
+  },
+  {
+    "id": "no-trigger-03",
+    "input": "帮我看看这个 React 组件为什么白屏",
+    "expect": "no_trigger",
+    "note": "should_not_trigger：前端工程问题，与 Hugo 无关"
+  },
+  {
+    "id": "no-trigger-04",
+    "input": "把 README 的错别字改一下",
+    "expect": "no_trigger",
+    "note": "should_not_trigger：普通文档改字，不涉及 Hugo front matter 与发布"
+  },
+  {
+    "id": "near-01",
+    "input": "这个 Hugo 站点仓库里改一下 README 的表格，不用发布",
+    "expect": "partial",
+    "note": "near_neighbor：虽在 Hugo 仓库里，但改 README 不应触发发布流程，只做普通文档编辑"
+  },
+  {
+    "id": "near-02",
+    "input": "先 git status 看看这篇草稿改了哪些，再决定要不要发布",
+    "expect": "partial",
+    "note": "near_neighbor：先查状态用 git_status_summary，发布决定未定不进入 hugo_publish"
+  },
+  {
+    "id": "near-03",
+    "input": "这篇 Hugo 文章的构建为什么失败？",
+    "expect": "partial",
+    "note": "near_neighbor：只问构建失败原因时走 hugo_build_check，不自动进入发布"
+  },
+  {
+    "id": "near-04",
+    "input": "我只是想看看这篇 Hugo 博文草稿的正文",
+    "expect": "partial",
+    "note": "near_neighbor：只读草稿不改 front matter、不构建、不发布"
+  },
+  {
+    "id": "near-05",
+    "input": "Hugo 站点版本太旧了，帮我升级 Hugo 二进制",
+    "expect": "partial",
+    "note": "near_neighbor：站点设施升级不属于博客写作/发布流程，不触发本 Skill"
+  }
+]

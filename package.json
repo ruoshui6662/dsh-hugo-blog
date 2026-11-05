@@ -1,0 +1,55 @@
+{
+  "name": "dsh-hugo-blog",
+  "version": "0.1.0",
+  "description": "Hugo 博客写作、发布、维护与推送工具层：新建内容、检查构建、清单与发布回执。",
+  "type": "module",
+  "main": "./lib/index.js",
+  "exports": {
+    ".": "./lib/index.js",
+    "./package.json": "./package.json",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./locale/*.json": "./locale/*.json",
+    "./client": "./client.js"
+  },
+  "files": [
+    "lib",
+    "client.js",
+    "assets",
+    "locale",
+    "icon.svg",
+    "cordis.patch.yml",
+    "README.md",
+    "README.en.md"
+  ],
+  "engines": {
+    "node": ">=22",
+    "dsh": ">=0.2.0-rc.1 <0.3.0-0"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web",
+      "immediately": true
+    }
+  },
+  "icon": "./icon.svg",
+  "license": "MIT",
+  "keywords": [
+    "dsh-plugin",
+    "dsh",
+    "hugo",
+    "blog",
+    "deepseek-harness"
+  ],
+  "author": "ruoshui6662",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ruoshui6662/dsh-hugo-blog.git"
+  },
+  "homepage": "https://github.com/ruoshui6662/dsh-hugo-blog#readme",
+  "bugs": {
+    "url": "https://github.com/ruoshui6662/dsh-hugo-blog/issues"
+  }
+}
