@@ -79,6 +79,13 @@ describe("hugo panel routes", () => {
     assert.deepEqual(edited.value.data.tags, ["a", "b"]);
   });
 
+  it("tree 列出内容目录结构", async () => {
+    const res = await (await handlers["/api/hugo-blog/tree"]({}, {})).json();
+    assert.equal(res.ok, true);
+    assert.ok(res.value.nodes.some((n) => n.path === "posts/a.md"));
+    assert.ok(res.value.nodes.some((n) => n.dir === true));
+  });
+
   it("articles 列表与搜索、read/save-article 往返", async () => {
     const list = await (await handlers["/api/hugo-blog/articles"]({ kind: "all" }, {})).json();
     assert.equal(list.ok, true);
