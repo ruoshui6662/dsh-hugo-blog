@@ -69,6 +69,12 @@ window.__ModuleLoader__.load({
       'panel.loading': '处理中…',
       'panel.error': '出错',
       'panel.ok': '完成',
+      'cmd.placeholder': '输入命令…',
+      'cmd.new': '写新文章',
+      'cmd.refresh': '刷新列表',
+      'cmd.layout': '切换卡片/列表视图',
+      'cmd.site': '选择站点目录',
+      'cmd.hint': '⌘K 打开命令面板',
     };
     const EN = {
       'panel.title': 'Hugo Blog',
@@ -120,6 +126,12 @@ window.__ModuleLoader__.load({
       'panel.loading': 'Working…',
       'panel.error': 'Error',
       'panel.ok': 'Done',
+      'cmd.placeholder': 'Type a command…',
+      'cmd.new': 'New article',
+      'cmd.refresh': 'Refresh list',
+      'cmd.layout': 'Toggle grid/list view',
+      'cmd.site': 'Choose site directory',
+      'cmd.hint': '⌘K opens the command palette',
     };
 
     async function callApi(name, body) {
@@ -260,6 +272,11 @@ window.__ModuleLoader__.load({
       const [messageKind, setMessageKind] = useState('muted');
       const [newPath, setNewPath] = useState('posts/');
       const [newOpen, setNewOpen] = useState(false);
+      const [covers, setCovers] = useState({});
+      const [dragFile, setDragFile] = useState(null);
+      const [paletteOpen, setPaletteOpen] = useState(false);
+      const [paletteQuery, setPaletteQuery] = useState('');
+      const [paletteIndex, setPaletteIndex] = useState(0);
 
       const say = useCallback((text, k = 'muted') => { setMessage(text); setMessageKind(k); }, []);
 
@@ -286,7 +303,13 @@ window.__ModuleLoader__.load({
         setSite(st.root);
         setStatus(st);
         setTree(tr.nodes ?? []);
-        setArticles(arts.articles ?? []);
+        const list = arts.articles ?? [];
+        setArticles(list);
+        list.slice(0, 24).forEach((a) => {
+          callApi('cover', { root: st.root, path: a.file }).then((c) => {
+            if (c.dataUrl) setCovers((prev) => ({ ...prev, [a.file]: c.dataUrl }));
+          }).catch(() => {});
+        });
         try { window.localStorage?.setItem(STORAGE_KEY, st.root); } catch { /* 忽略 */ }
       }, [kind, query]);
 
@@ -328,6 +351,40 @@ window.__ModuleLoader__.load({
         if (value?.file) { setNewOpen(false); await run(() => refreshAll(site)); openArticle(value.file); }
       }, [newPath, openArticle, refreshAll, run, site, t]);
 
+      const dropOn = useCallback(async (target) => {
+        if (!site || !dragFile || dragFile === target) return;
+        const from = articles.findIndex((a) => a.file === dragFile);
+        const to = articles.findIndex((a) => a.file === target);
+        if (from < 0 || to < 0) return;
+        const next = [...articles];
+        next.splice(from, 1);
+        next.splice(to, 0, articles[from]);
+        setArticles(next);
+        setDragFile(null);
+        await run(() => callApi('order', { root: site, order: next.map((a) => a.file) }));
+      }, [articles, dragFile, run, site]);
+
+      const commands = [
+        { id: 'new', label: t('cmd.new'), run: () => setNewOpen(true) },
+        { id: 'refresh', label: t('cmd.refresh'), run: () => site && run(() => refreshAll(site)) },
+        { id: 'layout', label: t('cmd.layout'), run: () => setLayout((v) => (v === 'grid' ? 'list' : 'grid')) },
+        { id: 'site', label: t('cmd.site'), run: chooseDirectory },
+      ];
+      const filteredCommands = commands.filter((c) => c.label.toLowerCase().includes(paletteQuery.toLowerCase()));
+
+      useEffect(() => {
+        const onKey = (e) => {
+          if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+            e.preventDefault();
+            setPaletteOpen((v) => !v);
+            setPaletteQuery('');
+            setPaletteIndex(0);
+          }
+        };
+        window.addEventListener('keydown', onKey);
+        return () => window.removeEventListener('keydown', onKey);
+      }, []);
+
       const sortedArticles = [...articles].sort((a, b) => sort === 'title'
         ? (a.title || a.file).localeCompare(b.title || b.file)
         : String(b.date).localeCompare(String(a.date)));
@@ -356,6 +413,51 @@ window.__ModuleLoader__.load({
           site ? h('span', { style: styles.muted }, syncText) : null,
           h('button', { style: styles.button, disabled: busy || !site, onClick: () => run(() => refreshAll(site)) }, t('manage.refresh')),
         ),
+
+        paletteOpen ? h('div', {
+            style: {
+              position: 'fixed', inset: 0, zIndex: 50, display: 'flex', justifyContent: 'center',
+              paddingTop: '12vh', background: 'rgba(0,0,0,0.35)',
+            },
+            onClick: () => setPaletteOpen(false),
+          },
+            h('div', {
+              style: {
+                width: 'min(480px, 90vw)', height: 'fit-content', borderRadius: 14, overflow: 'hidden',
+                background: 'var(--dsw-alias-bg-layer-1)', border: '1px solid var(--dsw-alias-border-l1)',
+                boxShadow: '0 16px 48px rgba(0,0,0,0.25)',
+              },
+              onClick: (e) => e.stopPropagation(),
+            },
+              h('input', {
+                style: {
+                  ...styles.input, border: 'none', borderRadius: 0, padding: '14px 16px',
+                  borderBottom: '1px solid var(--dsw-alias-border-l1)', fontSize: 14,
+                },
+                value: paletteQuery, placeholder: t('cmd.placeholder'), autoFocus: true,
+                onChange: (e) => { setPaletteQuery(e.target.value); setPaletteIndex(0); },
+                onKeyDown: (e) => {
+                  if (e.key === 'Escape') setPaletteOpen(false);
+                  if (e.key === 'ArrowDown') { e.preventDefault(); setPaletteIndex((i) => Math.min(i + 1, filteredCommands.length - 1)); }
+                  if (e.key === 'ArrowUp') { e.preventDefault(); setPaletteIndex((i) => Math.max(i - 1, 0)); }
+                  if (e.key === 'Enter') {
+                    const cmd = filteredCommands[paletteIndex];
+                    if (cmd) { setPaletteOpen(false); cmd.run(); }
+                  }
+                },
+              }),
+              h('div', { style: { padding: 6, maxHeight: 280, overflowY: 'auto' } },
+                filteredCommands.map((cmd, i) => h('div', {
+                  key: cmd.id,
+                  style: {
+                    padding: '9px 12px', borderRadius: 8, cursor: 'pointer', fontSize: 13,
+                    background: i === paletteIndex ? 'var(--dsw-alias-brand-primary)' : 'transparent',
+                    color: i === paletteIndex ? 'var(--dsw-alias-label-primary-inverted, #1b1b1b)' : undefined,
+                  },
+                  onMouseEnter: () => setPaletteIndex(i),
+                  onClick: () => { setPaletteOpen(false); cmd.run(); },
+                }, cmd.label))),
+            )) : null,
 
         site ? h('div', { style: styles.body },
           h('div', { style: styles.sidebar },
@@ -417,9 +519,18 @@ window.__ModuleLoader__.load({
               ? (layout === 'grid'
                   ? h('div', { style: styles.cardGrid }, sortedArticles.map((a) => h('div', {
                       key: a.file, style: styles.card, onClick: () => openArticle(a.file),
+                      draggable: true,
+                      onDragStart: (e) => { e.dataTransfer.setData('text/plain', a.file); setDragFile(a.file); },
+                      onDragOver: (e) => { e.preventDefault(); e.currentTarget.style.outline = '2px dashed var(--dsw-alias-brand-primary)'; },
+                      onDragLeave: (e) => { e.currentTarget.style.outline = 'none'; },
+                      onDrop: (e) => { e.preventDefault(); e.currentTarget.style.outline = 'none'; dropOn(a.file); },
                       onMouseEnter: (e) => { e.currentTarget.style.boxShadow = '0 6px 18px rgba(0,0,0,0.08)'; e.currentTarget.style.transform = 'translateY(-1px)'; },
-                      onMouseLeave: (e) => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'none'; },
+                      onMouseLeave: (e) => { e.currentTarget.style.boxShadow = '0 1px 2px rgba(0,0,0,0.04)'; e.currentTarget.style.transform = 'none'; e.currentTarget.style.outline = 'none'; },
                     },
+                      covers[a.file] ? h('img', {
+                        src: covers[a.file], alt: '',
+                        style: { width: '100%', height: 120, objectFit: 'cover', borderRadius: 10, marginBottom: 4 },
+                      }) : null,
                       h('div', { style: styles.cardTitle }, a.title || a.file),
                       h('div', { style: styles.meta }, `${a.date?.slice(0, 10) || ''} · ${a.file}`),
                       h('div', { style: styles.row }, a.draft ? h('span', { style: styles.badge }, t('manage.drafts')) : null,
@@ -600,6 +711,17 @@ window.__ModuleLoader__.load({
         const pickDirectory = typeof ctx.uiWorkspace?.pickDirectory === 'function'
           ? () => ctx.uiWorkspace.pickDirectory()
           : undefined;
+
+        // 深色模式跟随：面板主体走宿主主题 token，这里只同步系统偏好到 color-scheme，
+        // 让滚动条与原生控件（复选、文件选择）跟随深浅。
+        try {
+          const mq = window.matchMedia('(prefers-color-scheme: dark)');
+          const applyScheme = () => {
+            document.documentElement.style.colorScheme = mq.matches ? 'dark' : 'light';
+          };
+          mq.addEventListener?.('change', applyScheme);
+          applyScheme();
+        } catch { /* 非浏览器环境忽略 */ }
 
         ctx.slots.inject('sidebar.panellist', () =>
           ctx.slots.register(

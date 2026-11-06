@@ -86,6 +86,16 @@ describe("hugo panel routes", () => {
     assert.ok(res.value.nodes.some((n) => n.dir === true));
   });
 
+  it("cover 无封面返回空，order 保存并生效", async () => {
+    const cover = await (await handlers["/api/hugo-blog/cover"]({ path: "posts/a.md" }, {})).json();
+    assert.equal(cover.ok, true);
+    assert.equal(cover.value.dataUrl, "");
+
+    const ordered = await (await handlers["/api/hugo-blog/order"]({ order: ["posts/a.md"] }, {})).json();
+    assert.equal(ordered.ok, true);
+    assert.deepEqual(ordered.value.order, ["posts/a.md"]);
+  });
+
   it("articles 列表与搜索、read/save-article 往返", async () => {
     const list = await (await handlers["/api/hugo-blog/articles"]({ kind: "all" }, {})).json();
     assert.equal(list.ok, true);
