@@ -79,6 +79,52 @@ describe("hugo panel routes", () => {
     assert.deepEqual(edited.value.data.tags, ["a", "b"]);
   });
 
+  it("articles 列表与搜索、read/save-article 往返", async () => {
+    const list = await (await handlers["/api/hugo-blog/articles"]({ kind: "all" }, {})).json();
+    assert.equal(list.ok, true);
+    assert.ok(list.value.total >= 1);
+    assert.ok(list.value.articles[0].file.endsWith(".md"));
+
+    const searched = await (await handlers["/api/hugo-blog/articles"]({ query: "a.md" }, {})).json();
+    assert.ok(searched.value.articles.length >= 1);
+
+    const saved = await (await handlers["/api/hugo-blog/save-article"]({
+      path: "posts/a.md",
+      data: { title: "Renamed" },
+      body: "new body\n",
+    }, {})).json();
+    assert.equal(saved.ok, true);
+    assert.equal(saved.value.data.title, "Renamed");
+
+    const read = await (await handlers["/api/hugo-blog/read-article"]({ path: "posts/a.md" }, {})).json();
+    assert.equal(read.ok, true);
+    assert.equal(read.value.data.title, "Renamed");
+    assert.equal(read.value.body, "new body\n");
+  });
+
+  it("insert-image 落盘并返回引用，非法后缀拒绝", async () => {
+    const png = Buffer.from("89504e470d0a1a0a", "hex").toString("base64");
+    const res = await (await handlers["/api/hugo-blog/insert-image"]({
+      path: "posts/a.md", name: "pic.png", dataBase64: png,
+    }, {})).json();
+    assert.equal(res.ok, true);
+    assert.equal(res.value.image, "images/pic.png");
+    assert.equal(res.value.markdown, "![pic](images/pic.png)");
+
+    const bad = await (await handlers["/api/hugo-blog/insert-image"]({
+      path: "posts/a.md", name: "x.exe", dataBase64: png,
+    }, {})).json();
+    assert.equal(bad.ok, false);
+    assert.equal(bad.error.code, "bad-name");
+  });
+
+  it("check 清单结构", async () => {
+    const res = await (await handlers["/api/hugo-blog/check"]({}, {})).json();
+    assert.equal(res.ok, true);
+    assert.ok(Array.isArray(res.value.items));
+    assert.ok(res.value.items.some((i) => i.name === "build"));
+  });
+
   it("内容路径越界拒绝", async () => {
     const res = await (await handlers["/api/hugo-blog/read-frontmatter"]({ path: "../outside.md" }, {})).json();
     assert.equal(res.ok, false);

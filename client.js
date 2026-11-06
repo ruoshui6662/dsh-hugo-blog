@@ -11,7 +11,7 @@ window.__ModuleLoader__.load({
   factory(require) {
     const React = require('react');
     const h = React.createElement;
-    const { useState, useCallback, useEffect } = React;
+    const { useState, useCallback, useEffect, useRef } = React;
 
     const NS = 'dsh-hugo-blog';
     const ROUTE_ROOT = 'api/hugo-blog';
@@ -66,6 +66,20 @@ window.__ModuleLoader__.load({
       'panel.loading': '处理中…',
       'panel.error': '出错',
       'panel.ok': '完成',
+      'articles.search': '搜索标题或路径…',
+      'articles.empty': '还没有文章，点「创建」写第一篇。',
+      'editor.body': '正文（Markdown）',
+      'editor.insertImage': '插入图片',
+      'editor.bold': '加粗',
+      'editor.heading': '标题',
+      'editor.list': '列表',
+      'editor.link': '链接',
+      'check.title': '检查清单',
+      'check.run': '一键检查',
+      'check.pass': '通过',
+      'check.fail': '未通过',
+      'maint.title': '日常维护',
+      'maint.hint': '草稿、未来定时发布、已过期三类在「文章列表」中切换查看；下架用过期日期字段。',
     };
     const EN = {
       'panel.title': 'Hugo Blog',
@@ -115,6 +129,20 @@ window.__ModuleLoader__.load({
       'panel.loading': 'Working…',
       'panel.error': 'Error',
       'panel.ok': 'Done',
+      'articles.search': 'Search title or path…',
+      'articles.empty': 'No articles yet. Create the first one.',
+      'editor.body': 'Body (Markdown)',
+      'editor.insertImage': 'Insert image',
+      'editor.bold': 'Bold',
+      'editor.heading': 'Heading',
+      'editor.list': 'List',
+      'editor.link': 'Link',
+      'check.title': 'Checklist',
+      'check.run': 'Run checks',
+      'check.pass': 'Pass',
+      'check.fail': 'Fail',
+      'maint.title': 'Maintenance',
+      'maint.hint': 'Drafts, scheduled, and expired articles are under the article list kinds. Use the expiry date to take a post down.',
     };
 
     async function callApi(name, body) {
@@ -205,8 +233,12 @@ window.__ModuleLoader__.load({
       const [busy, setBusy] = useState(false);
       const [message, setMessage] = useState('');
       const [messageKind, setMessageKind] = useState('muted');
-      const [listKind, setListKind] = useState('drafts');
+      const [listKind, setListKind] = useState('all');
       const [listRows, setListRows] = useState([]);
+      const [query, setQuery] = useState('');
+      const [body, setBody] = useState('');
+      const [checkItems, setCheckItems] = useState([]);
+      const bodyRef = useRef(null);
       const [newPath, setNewPath] = useState('posts/');
       const [editPath, setEditPath] = useState('');
       const [fmTitle, setFmTitle] = useState('');
@@ -278,22 +310,9 @@ window.__ModuleLoader__.load({
 
       const listArticles = useCallback(async () => {
         if (!site) return;
-        const value = await run(() => callApi('drafts', { root: site, kind: listKind }));
-        if (value) setListRows(value.rows ?? []);
-      }, [listKind, run, site]);
-
-      const createArticle = useCallback(async () => {
-        if (!site || !newPath.trim()) return;
-        const value = await run(() => callApi('new-content', { root: site, path: newPath.trim() }), t('panel.ok'));
-        if (value?.file) { setEditPath(value.file); await refreshStatus(); }
-      }, [newPath, refreshStatus, run, site, t]);
-
-      const createBundle = useCallback(async () => {
-        if (!site || !newPath.trim()) return;
-        const dir = newPath.trim().replace(/\.md$/, '').replace(/\/index$/, '');
-        const value = await run(() => callApi('new-pagebundle', { root: site, dir }), t('panel.ok'));
-        if (value?.file) { setEditPath(value.file); await refreshStatus(); }
-      }, [newPath, refreshStatus, run, site, t]);
+        const value = await run(() => callApi('articles', { root: site, kind: listKind, query }));
+        if (value) setListRows(value.articles ?? []);
+      }, [listKind, query, run, site]);
 
       const fillFrontmatter = useCallback((data) => {
         setFmTitle(data.title ?? '');
@@ -306,10 +325,30 @@ window.__ModuleLoader__.load({
         setFmSlug(data.slug ?? '');
       }, []);
 
+      const loadArticle = useCallback(async (file) => {
+        if (!site || !file) return;
+        setEditPath(file);
+        const value = await run(() => callApi('read-article', { root: site, path: file }));
+        if (value) { fillFrontmatter(value.data ?? {}); setBody(value.body ?? ''); }
+      }, [fillFrontmatter, run, site]);
+
+      const createArticle = useCallback(async () => {
+        if (!site || !newPath.trim()) return;
+        const value = await run(() => callApi('new-content', { root: site, path: newPath.trim() }), t('panel.ok'));
+        if (value?.file) { await loadArticle(value.file); await refreshStatus(); }
+      }, [loadArticle, newPath, refreshStatus, run, site, t]);
+
+      const createBundle = useCallback(async () => {
+        if (!site || !newPath.trim()) return;
+        const dir = newPath.trim().replace(/\.md$/, '').replace(/\/index$/, '');
+        const value = await run(() => callApi('new-pagebundle', { root: site, dir }), t('panel.ok'));
+        if (value?.file) { setEditPath(value.file); await refreshStatus(); }
+      }, [newPath, refreshStatus, run, site, t]);
+
       const loadFrontmatter = useCallback(async () => {
         if (!site || !editPath.trim()) return;
-        const value = await run(() => callApi('read-frontmatter', { root: site, path: editPath.trim() }));
-        if (value) fillFrontmatter(value.data ?? {});
+        const value = await run(() => callApi('read-article', { root: site, path: editPath.trim() }));
+        if (value) { fillFrontmatter(value.data ?? {}); setBody(value.body ?? ''); }
       }, [editPath, fillFrontmatter, run, site]);
 
       const saveFrontmatter = useCallback(async () => {
@@ -324,9 +363,42 @@ window.__ModuleLoader__.load({
           expiryDate: fmExpiryDate || undefined,
           slug: fmSlug || undefined,
         };
-        const value = await run(() => callApi('edit-frontmatter', { root: site, path: editPath.trim(), patch }), t('panel.ok'));
+        const value = await run(() => callApi('save-article', { root: site, path: editPath.trim(), data: patch, body }), t('panel.ok'));
         if (value) { fillFrontmatter(value.data ?? {}); await refreshStatus(); }
-      }, [editPath, fillFrontmatter, fmCategories, fmDate, fmDraft, fmExpiryDate, fmPublishDate, fmSlug, fmTags, fmTitle, refreshStatus, run, site, t]);
+      }, [body, editPath, fillFrontmatter, fmCategories, fmDate, fmDraft, fmExpiryDate, fmPublishDate, fmSlug, fmTags, fmTitle, refreshStatus, run, site, t]);
+
+      const wrapSelection = useCallback((before, after, placeholder) => {
+        const el = bodyRef.current;
+        if (!el) return;
+        const start = el.selectionStart ?? 0;
+        const end = el.selectionEnd ?? start;
+        const selected = body.slice(start, end) || placeholder;
+        const next = `${body.slice(0, start)}${before}${selected}${after}${body.slice(end)}`;
+        setBody(next);
+        requestAnimationFrame(() => {
+          el.focus();
+          el.setSelectionRange(start + before.length, start + before.length + selected.length);
+        });
+      }, [body]);
+
+      const insertImage = useCallback(async (file) => {
+        if (!site || !editPath.trim() || !file) return;
+        const buffer = await file.arrayBuffer();
+        let binary = '';
+        const bytes = new Uint8Array(buffer);
+        for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+        const dataBase64 = window.btoa(binary);
+        const value = await run(() => callApi('insert-image', {
+          root: site, path: editPath.trim(), name: file.name, dataBase64,
+        }), t('panel.ok'));
+        if (value?.markdown) setBody((prev) => `${prev}\n\n${value.markdown}\n`);
+      }, [editPath, run, site, t]);
+
+      const runCheck = useCallback(async () => {
+        if (!site) return;
+        const value = await run(() => callApi('check', { root: site }));
+        if (value) setCheckItems(value.items ?? []);
+      }, [run, site]);
 
       const build = useCallback(async () => {
         if (!site) return;
@@ -387,15 +459,17 @@ window.__ModuleLoader__.load({
             ),
             h('button', { style: styles.button, disabled: busy, onClick: listArticles }, t('list.load')),
           ),
+          h('input', {
+            style: styles.input, value: query, placeholder: t('articles.search'),
+            onChange: (e) => setQuery(e.target.value),
+            onKeyDown: (e) => { if (e.key === 'Enter') listArticles(); },
+          }),
           listRows.length
-            ? h('div', { style: styles.list }, listRows.map((row, i) => {
-                const file = String(row).split(',')[0];
-                return h('div', {
-                  key: i, style: { ...styles.mono, cursor: 'pointer' },
-                  onClick: () => { if (file) setEditPath(file); },
-                }, row);
-              }))
-            : h('div', { style: styles.muted }, '—'),
+            ? h('div', { style: styles.list }, listRows.map((a) => h('div', {
+                key: a.file, style: { ...styles.mono, cursor: 'pointer', padding: '2px 0' },
+                onClick: () => { setEditPath(a.file); loadArticle(a.file); },
+              }, `${a.draft ? '📝 ' : ''}${a.title || a.file} · ${a.date?.slice(0, 10) || ''}`)))
+            : h('div', { style: styles.muted }, t('articles.empty')),
         ) : null,
 
         site ? h(Section, { title: t('new.title') },
@@ -439,6 +513,37 @@ window.__ModuleLoader__.load({
             h('label', { style: { ...styles.label, flex: '1 1 140px' } }, t('edit.expiryDate'),
               h('input', { style: styles.input, value: fmExpiryDate, placeholder: '2026-11-05', onChange: (e) => setFmExpiryDate(e.target.value) })),
           ),
+          h('label', { style: styles.label }, t('editor.body'),
+            h('div', { style: styles.row },
+              h('button', { style: styles.button, type: 'button', onClick: () => wrapSelection('**', '**', '加粗文字') }, t('editor.bold')),
+              h('button', { style: styles.button, type: 'button', onClick: () => wrapSelection('## ', '', '小标题') }, t('editor.heading')),
+              h('button', { style: styles.button, type: 'button', onClick: () => wrapSelection('- ', '', '列表项') }, t('editor.list')),
+              h('button', { style: styles.button, type: 'button', onClick: () => wrapSelection('[', '](https://)', '链接文字') }, t('editor.link')),
+              h('label', { style: styles.button },
+                t('editor.insertImage'),
+                h('input', {
+                  type: 'file', accept: 'image/png,image/jpeg,image/gif,image/webp,image/svg+xml', style: { display: 'none' },
+                  onChange: (e) => insertImage(e.target.files?.[0]),
+                })),
+            ),
+            h('textarea', {
+              ref: bodyRef, style: { ...styles.input, minHeight: 220, resize: 'vertical', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 12.5, lineHeight: 1.6 },
+              value: body, onChange: (e) => setBody(e.target.value),
+            })),
+        ) : null,
+
+        site ? h(Section, { title: t('check.title') },
+          h('div', { style: styles.row },
+            h('button', { style: styles.button, disabled: busy, onClick: runCheck }, t('check.run')),
+          ),
+          checkItems.length
+            ? h('div', { style: styles.list }, checkItems.map((item) => h('div', { key: item.name, style: item.ok ? styles.ok : styles.error },
+                `${item.ok ? '✓' : '✗'} ${item.name}：${item.detail}`)))
+            : null,
+        ) : null,
+
+        site ? h(Section, { title: t('maint.title') },
+          h('div', { style: styles.muted }, t('maint.hint')),
         ) : null,
 
         site ? h(Section, { title: t('build.title') },
